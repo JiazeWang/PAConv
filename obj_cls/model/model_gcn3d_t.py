@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
-import gcn3d
+import model.gcn3d
 
 
 class SA_Layer(nn.Module):
