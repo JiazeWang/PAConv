@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
-import model.gcn3d
-
+sys.path.append("../")
+import gcn3d
 
 class SA_Layer(nn.Module):
     def __init__(self, channels):
