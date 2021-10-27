@@ -100,7 +100,7 @@ def train(args, io):
     #opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
     #scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
 
-    opt = optim.Adam(self.model.parameters(), lr= args.lr)
+    opt = optim.Adam(model.parameters(), lr= args.lr)
     scheduler = optim.lr_scheduler.StepLR(opt, step_size= 10, gamma= 0.5)
 
     criterion = cal_loss
