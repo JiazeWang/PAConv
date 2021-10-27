@@ -65,9 +65,9 @@ def weight_init(m):
     elif isinstance(m, torch.nn.BatchNorm2d):
         torch.nn.init.constant_(m.weight, 1)
         torch.nn.init.constant_(m.bias, 0)
-    elif isinstance(m, torch.nn.BatchNorm1d):
-        torch.nn.init.constant_(m.weight, 1)
-        torch.nn.init.constant_(m.bias, 0)
+    #elif isinstance(m, torch.nn.BatchNorm1d):
+        #torch.nn.init.constant_(m.weight, 1)
+        #torch.nn.init.constant_(m.bias, 0)
 
 
 def train(args, io):
@@ -97,11 +97,11 @@ def train(args, io):
     print("Let's use", torch.cuda.device_count(), "GPUs!")
 
     print("Use SGD")
-    #opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
-    #scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
+    opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
+    scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
 
-    opt = optim.Adam(model.parameters(), lr= 0.001)
-    scheduler = optim.lr_scheduler.StepLR(opt, step_size= 10, gamma= 0.5)
+    #opt = optim.Adam(model.parameters(), lr= 0.001)
+    #scheduler = optim.lr_scheduler.StepLR(opt, step_size= 10, gamma= 0.5)
 
     criterion = cal_loss
 
