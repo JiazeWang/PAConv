@@ -125,6 +125,7 @@ def train(args, io):
             logits = model(data)
             loss = criterion(logits, label)
             loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0, norm_type=2)
             opt.step()
             preds = logits.max(dim=1)[1]
             count += batch_size
