@@ -97,8 +97,11 @@ def train(args, io):
     print("Let's use", torch.cuda.device_count(), "GPUs!")
 
     print("Use SGD")
-    opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
-    scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
+    #opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
+    #scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
+
+    opt = optim.Adam(self.model.parameters(), lr= args.lr)
+    scheduler = optim.lr_scheduler.StepLR(opt, step_size= 10, gamma= 0.5)
 
     criterion = cal_loss
 
