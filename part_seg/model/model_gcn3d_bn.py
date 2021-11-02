@@ -10,12 +10,9 @@ class GCN3D(nn.Module):
         super().__init__()
         self.neighbor_num = neighbor_num
         self.num_part = class_num
-        self.neighbor_num_local = 10
+
         self.conv_0 = gcn3d.Conv_surface(kernel_num= 128, support_num= support_num)
         self.conv_1 = gcn3d.Conv_layer(128, 128, support_num= support_num)
-        self.conv
-        self.conv_0_l = gcn3d.Conv_surface(kernel_num= 128, support_num= support_num)
-        self.conv_1_l = gcn3d.Conv_layer(128, 128, support_num= support_num)
         self.pool_1 = gcn3d.Pool_layer(pooling_rate= 4, neighbor_num= 4)
         self.conv_2 = gcn3d.Conv_layer(128, 256, support_num= support_num)
         self.conv_3 = gcn3d.Conv_layer(256, 256, support_num= support_num)
@@ -31,6 +28,11 @@ class GCN3D(nn.Module):
             nn.Conv1d(512, class_num, 1),
         )
 
+        self.bn0 = nn.BatchNorm1d(128, momentum=0.1)
+        self.bn1 = nn.BatchNorm1d(128, momentum=0.1)
+        self.bn2 = nn.BatchNorm1d(256, momentum=0.1)
+        self.bn3 = nn.BatchNorm1d(256, momentum=0.1)
+
     def forward(self,
                 vertices: "tensor (bs, vetice_num, 3)",
                 onehot: "tensor (bs, cat_num)",
@@ -42,25 +44,16 @@ class GCN3D(nn.Module):
 
         bs, vertice_num, _ = vertices.size()
         neighbor_index = gcn3d.get_neighbor_index(vertices, self.neighbor_num)
-        fm_0 = F.relu(self.conv_0(neighbor_index, vertices), inplace= True)
-        fm_1 = F.relu(self.conv_1(neighbor_index, vertices, fm_0), inplace= True)
-        #print("fm_1.shape", fm_1.shape) fm_1.shape torch.Size([32, 2048, 128])
 
-        neighbor_index_l = gcn3d.get_neighbor_index(vertices, self.neighbor_num_local)
-        fm_0_l = F.relu(self.conv_0_l(neighbor_index_l, vertices), inplace= True)
-        fm_1_l = F.relu(self.conv_1_l(neighbor_index_l, vertices, fm_0_l), inplace= True)
-
-        fm_1_t = torch.cat((fm_1, fm_1_l), dim = 2)
+        fm_0 = F.relu(self.bn0(self.conv_0(neighbor_index, vertices).transpose(2, 1)).transpose(2, 1), inplace= True)
+        fm_1 = F.relu(self.bn1(self.conv_1(neighbor_index, vertices, fm_0).transpose(2, 1)).transpose(2, 1), inplace= True)
         v_pool_1, fm_pool_1 = self.pool_1(vertices, fm_1)
-        #print("fm_pool_1.shape", fm_pool_1.shape) fm_pool_1.shape torch.Size([32, 512, 128])
-
         neighbor_index = gcn3d.get_neighbor_index(v_pool_1, self.neighbor_num)
 
-        fm_2 = F.relu(self.conv_2(neighbor_index, v_pool_1, fm_pool_1), inplace= True)
-        fm_3 = F.relu(self.conv_3(neighbor_index, v_pool_1, fm_2), inplace= True)
-        #print("fm_3.shape", fm_3.shape) fm_3.shape torch.Size([32, 512, 256])
+        fm_2 = F.relu(self.bn2(self.conv_2(neighbor_index, v_pool_1, fm_pool_1).transpose(2, 1)).transpose(2, 1), inplace= True)
+        fm_3 = F.relu(self.bn3(self.conv_3(neighbor_index, v_pool_1, fm_2).transpose(2, 1)).transpose(2, 1), inplace= True)
+        #print("add bn")
         v_pool_2, fm_pool_2 = self.pool_2(v_pool_1, fm_3)
-        #print("fm_pool_2.shape", fm_pool_2.shape) fm_pool_2.shape torch.Size([32, 128, 256])
         neighbor_index = gcn3d.get_neighbor_index(v_pool_2, self.neighbor_num)
 
         fm_4 = self.conv_4(neighbor_index, v_pool_2, fm_pool_2)
