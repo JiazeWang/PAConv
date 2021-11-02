@@ -64,6 +64,7 @@ class GCN3D(nn.Module):
 
         conv1d_input = fm_fuse.permute(0, 2, 1) #(bs, fuse_ch, vertice_num)
         conv1d_out = self.conv1d_block(conv1d_input)
+        conv1d_out = F.log_softmax(conv1d_out, dim=1)
         pred = conv1d_out.permute(0, 2, 1) #(bs, vertice_num, ch)
 
         if gt is not None:
