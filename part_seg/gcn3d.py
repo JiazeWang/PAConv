@@ -9,6 +9,13 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+
+random.seed("1024")
+np.random.seed("1024")
+torch.manual_seed("1024")
+torch.cuda.manual_seed("1024")
+torch.cuda.manual_seed_all("1024")
 
 def get_neighbor_index(vertices: "(bs, vertice_num, 3)",  neighbor_num: int):
     """
@@ -66,14 +73,14 @@ class Conv_surface(nn.Module):
     def initialize(self):
         stdv = 1. / math.sqrt(self.support_num * self.kernel_num)
         self.directions.data.uniform_(-stdv, stdv)
-    
-    def forward(self, 
-                neighbor_index: "(bs, vertice_num, neighbor_num)", 
+
+    def forward(self,
+                neighbor_index: "(bs, vertice_num, neighbor_num)",
                 vertices: "(bs, vertice_num, 3)"):
         """
         Return vertices with local feature: (bs, vertice_num, kernel_num)
         """
-        bs, vertice_num, neighbor_num = neighbor_index.size() 
+        bs, vertice_num, neighbor_num = neighbor_index.size()
         neighbor_direction_norm = get_neighbor_direction_norm(vertices, neighbor_index)
         support_direction_norm = F.normalize(self.directions, dim= 0) #(3, s * k)
         theta = neighbor_direction_norm @ support_direction_norm # (bs, vertice_num, neighbor_num, s*k)
@@ -87,7 +94,7 @@ class Conv_surface(nn.Module):
 class Conv_layer(nn.Module):
     def __init__(self, in_channel, out_channel, support_num):
         super().__init__()
-        # arguments: 
+        # arguments:
         self.in_channel = in_channel
         self.out_channel = out_channel
         self.support_num = support_num
@@ -105,7 +112,7 @@ class Conv_layer(nn.Module):
         self.bias.data.uniform_(-stdv, stdv)
         self.directions.data.uniform_(-stdv, stdv)
 
-    def forward(self, 
+    def forward(self,
                 neighbor_index: "(bs, vertice_num, neighbor_index)",
                 vertices: "(bs, vertice_num, 3)",
                 feature_map: "(bs, vertice_num, in_channel)"):
@@ -139,7 +146,7 @@ class Pool_layer(nn.Module):
         self.pooling_rate = pooling_rate
         self.neighbor_num = neighbor_num
 
-    def forward(self, 
+    def forward(self,
                 vertices: "(bs, vertice_num, 3)",
                 feature_map: "(bs, vertice_num, channel_num)"):
         """
@@ -171,7 +178,7 @@ def test():
     conv_1 = Conv_surface(kernel_num= 32, support_num= s)
     conv_2 = Conv_layer(in_channel= 32, out_channel= 64, support_num= s)
     pool = Pool_layer(pooling_rate= 4, neighbor_num= 4)
-    
+
     print("Input size: {}".format(vertices.size()))
     start = time.time()
     f1 = conv_1(neighbor_index, vertices)
