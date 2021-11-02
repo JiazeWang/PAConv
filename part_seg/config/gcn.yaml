@@ -5,7 +5,7 @@ MODEL:
   hidden: [[16,16,16],[16,16,16],[16,16,16],[16,16,16]]
 
 TRAIN:
-  exp_name: gcn
+  exp_name: dgcnn_paconv_train
   num_points: 2048
   batch_size: 32
   test_batch_size: 16
