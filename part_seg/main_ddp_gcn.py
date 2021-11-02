@@ -9,7 +9,7 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, MultiStepLR
 from util.data_util import PartNormalDataset
 import torch.nn.functional as F
-from model.DGCNN_PAConv import PAConv
+#from model.DGCNN_PAConv import PAConv
 import numpy as np
 from torch.utils.data import DataLoader
 from util.util import to_categorical, compute_overall_iou, load_cfg_from_cfg_file, merge_cfg_from_list, find_free_port
@@ -94,7 +94,8 @@ def weight_init(m):
 def train(gpu, ngpus_per_node):
     # ============= Model ===================
     num_part = 50
-    model = PAConv(args, num_part)
+    from model.model_gcn3d import GCN3D
+    model = model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 50)
 
     model.apply(weight_init)
 
@@ -195,7 +196,8 @@ def train(gpu, ngpus_per_node):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_acc': best_acc}
-            torch.save(state, 'checkpoints/%s/best_acc_model.pth' % args.exp_name)
+            #torch.save(state, 'checkpoints/%s/best_acc_model.pth' % args.exp_name)
+            torch.save(state, 'checkpoints/%s/best_acc_model_%s.pth' % args.exp_name, str(epoch))
 
         # 2. when get the best instance_iou, save the model:
         if test_metrics['shape_avg_iou'] > best_instance_iou and main_process():
@@ -204,7 +206,8 @@ def train(gpu, ngpus_per_node):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_instance_iou': best_instance_iou}
-            torch.save(state, 'checkpoints/%s/best_insiou_model.pth' % args.exp_name)
+            #torch.save(state, 'checkpoints/%s/best_insiou_model.pth' % args.exp_name)
+            torch.save(state, 'checkpoints/%s/best_insiou_model_%s.pth' % args.exp_name, str(epoch))
 
         # 3. when get the best class_iou, save the model:
         # first we need to calculate the average per-class iou
@@ -222,7 +225,8 @@ def train(gpu, ngpus_per_node):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_class_iou': best_class_iou}
-            torch.save(state, 'checkpoints/%s/best_clsiou_model.pth' % args.exp_name)
+            #torch.save(state, 'checkpoints/%s/best_clsiou_model.pth' % args.exp_name)
+            torch.save(state, 'checkpoints/%s/best_clsiou_model_%s.pth' % args.exp_name, str(epoch))
 
     if main_process():
         # report best acc, ins_iou, cls_iou
@@ -251,7 +255,10 @@ def train_epoch(train_loader, model, opt, scheduler, epoch, num_part, num_classe
         norm_plt = norm_plt.transpose(2, 1)
         points, label, target, norm_plt = points.cuda(non_blocking=True), label.squeeze(1).cuda(non_blocking=True), target.cuda(non_blocking=True), norm_plt.cuda(non_blocking=True)
         # target: b,n
-        seg_pred, loss = model(points, norm_plt, to_categorical(label, num_classes), target)  # seg_pred: b,n,50
+        #print("label.shape ", label.shape) label.shape  torch.Size([32])
+        #print("target.shape:", target.shape) target.shape: torch.Size([32, 2048])
+        #print("to_categorical(label, num_classes)", to_categorical(label, num_classes).shape) # torch.Size([32, 16])
+        seg_pred, loss = model(points, to_categorical(label, num_classes), target)  # seg_pred: b,n,50
 
         # instance iou without considering the class average at each batch_size:
         batch_shapeious = compute_overall_iou(seg_pred, target, num_part)  # list of of current batch_iou:[iou1,iou2,...,iou#b_size]
@@ -328,7 +335,7 @@ def test_epoch(test_loader, model, epoch, num_part, num_classes):
         points = points.transpose(2, 1)
         norm_plt = norm_plt.transpose(2, 1)
         points, label, target, norm_plt = points.cuda(non_blocking=True), label.squeeze(1).cuda(non_blocking=True), target.cuda(non_blocking=True), norm_plt.cuda(non_blocking=True)
-        seg_pred = model(points, norm_plt, to_categorical(label, num_classes))  # b,n,50
+        seg_pred = model(points, to_categorical(label, num_classes))  # b,n,50
 
         # instance iou without considering the class average at each batch_size:
         batch_shapeious = compute_overall_iou(seg_pred, target, num_part)  # [b]

@@ -44,9 +44,11 @@ def _init_():
 
     if not args.eval:  # backup the running files
         os.system('cp main.py checkpoints' + '/' + args.exp_name + '/' + 'main.py.backup')
-        os.system('cp util/PAConv_util.py checkpoints' + '/' + args.exp_name + '/' + 'PAConv_util.py.backup')
-        os.system('cp util/data_util.py checkpoints' + '/' + args.exp_name + '/' + 'data_util.py.backup')
-        os.system('cp DGCNN_PAConv.py checkpoints' + '/' + args.exp_name + '/' + 'DGCNN_PAConv.py.backup')
+        #os.system('cp util/PAConv_util.py checkpoints' + '/' + args.exp_name + '/' + 'PAConv_util.py.backup')
+        #os.system('cp util/data_util.py checkpoints' + '/' + args.exp_name + '/' + 'data_util.py.backup')
+        #os.system('cp DGCNN_PAConv.py checkpoints' + '/' + args.exp_name + '/' + 'DGCNN_PAConv.py.backup')
+        os.system('cp gcn3d.py checkpoints' + '/' + args.exp_name + '/' + 'gcn3d.py.backup')
+        os.system('cp model/model_gcn3d.py checkpoints' + '/' + args.exp_name + '/' + 'model_gcn3d.py.backup')
 
     global writer
     writer = SummaryWriter('checkpoints/' + args.exp_name)
@@ -79,7 +81,9 @@ def train(args, io):
     num_part = 50
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    model = PAConv(args, num_part).to(device)
+    #model = PAConv(args, num_part).to(device)
+    from model.model_gcn3d import GCN3D
+    model = model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 50)
     io.cprint(str(model))
 
     model.apply(weight_init)
@@ -153,7 +157,7 @@ def train(args, io):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_acc': best_acc}
-            torch.save(state, 'checkpoints/%s/best_acc_model.pth' % args.exp_name)
+            torch.save(state, 'checkpoints/%s/best_acc_model_%s.pth' % args.exp_name, str(epoch))
 
         # 2. when get the best instance_iou, save the model:
         if test_metrics['shape_avg_iou'] > best_instance_iou:
@@ -162,7 +166,7 @@ def train(args, io):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_instance_iou': best_instance_iou}
-            torch.save(state, 'checkpoints/%s/best_insiou_model.pth' % args.exp_name)
+            torch.save(state, 'checkpoints/%s/best_insiou_model_%s.pth' % args.exp_name, str(epoch))
 
         # 3. when get the best class_iou, save the model:
         # first we need to calculate the average per-class iou
@@ -179,7 +183,7 @@ def train(args, io):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_class_iou': best_class_iou}
-            torch.save(state, 'checkpoints/%s/best_clsiou_model.pth' % args.exp_name)
+            torch.save(state, 'checkpoints/%s/best_clsiou_model_%s.pth' % args.exp_name, str(epoch))
 
     # report best acc, ins_iou, cls_iou
     io.cprint('Final Max Acc:%.5f' % best_acc)
