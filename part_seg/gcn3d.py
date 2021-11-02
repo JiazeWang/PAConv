@@ -9,10 +9,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 
-random.seed("1024")
-np.random.seed("1024")
 torch.manual_seed("1024")
 torch.cuda.manual_seed("1024")
 torch.cuda.manual_seed_all("1024")
