@@ -94,8 +94,8 @@ def weight_init(m):
 def train(gpu, ngpus_per_node):
     # ============= Model ===================
     num_part = 50
-    from model.model_gcn3d import GCN3D
-    model = model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 50)
+    from model.model_gcn3d_transformer import GCN3D
+    model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 50)
 
     model.apply(weight_init)
 
