@@ -70,7 +70,7 @@ class GCN_Fusion_surface(nn.Module):
         self.neighbor_num_g = neighbor_num_g
         self.dim = dim_input
         self.conv_l = gcn3d.Conv_surface(kernel_num = dim_input, support_num = support_num)
-        self.conv_g = gcn3d.Conv_surface(kernel_num = dim_input, support_num = support_num)
+        self.conv_g = gcn3d.Conv_surface(kernel_num = dim_input, support_num = support_num*3)
         self.bn_l = nn.BatchNorm1d(dim_input, momentum=0.1)
         self.bn_g = nn.BatchNorm1d(dim_input, momentum=0.1)
 
@@ -90,7 +90,7 @@ class GCN_Fusion(nn.Module):
         self.neighbor_num_g = neighbor_num_g
         self.dim = dim_input
         self.conv_l = gcn3d.Conv_layer(dim_input, dim_input, support_num= support_num)
-        self.conv_g = gcn3d.Conv_layer(dim_input, dim_input, support_num= support_num)
+        self.conv_g = gcn3d.Conv_layer(dim_input, dim_input, support_num= support_num*3)
         self.bn_l = nn.BatchNorm1d(dim_input, momentum=0.1)
         self.bn_g = nn.BatchNorm1d(dim_input, momentum=0.1)
 
