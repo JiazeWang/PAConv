@@ -5,36 +5,13 @@ import sys
 sys.path.append("../")
 import gcn3d
 
-class SA_Layer(nn.Module):
-    def __init__(self, channels):
-        super(SA_Layer, self).__init__()
-        self.q_conv = nn.Conv1d(channels, channels // 4, 1, bias=False)
-        self.k_conv = nn.Conv1d(channels, channels // 4, 1, bias=False)
-        self.q_conv.weight = self.k_conv.weight
-        self.q_conv.bias = self.k_conv.bias
+from pointnet_util import index_points, square_distance
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
 
-        self.v_conv = nn.Conv1d(channels, channels, 1)
-        self.trans_conv = nn.Conv1d(channels, channels, 1)
-        self.after_norm = nn.BatchNorm1d(channels)
-        self.act = nn.ReLU()
-        self.softmax = nn.Softmax(dim=-1)
 
-    def forward(self, x):
-        # b, n, c
-        x_q = self.q_conv(x).permute(0, 2, 1)
-        # b, c, n
-        x_k = self.k_conv(x)
-        x_v = self.v_conv(x)
-        # b, n, n
-        energy = torch.bmm(x_q, x_k)
-
-        attention = self.softmax(energy)
-        attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
-        # b, c, n
-        x_r = torch.bmm(x_v, attention)
-        x_r = self.act(self.after_norm(self.trans_conv(x - x_r)))
-        x = x + x_r
-        return x
 
 
 class GCN3D(nn.Module):
@@ -50,11 +27,11 @@ class GCN3D(nn.Module):
         self.conv_3 = gcn3d.Conv_layer(256, 256, support_num= support_num)
         self.pool_2 = gcn3d.Pool_layer(pooling_rate= 4, neighbor_num= 4)
         self.conv_4 = gcn3d.Conv_layer(256, 512, support_num= support_num)
-        self.sa0 = SA_Layer(channels=128)
-        self.sa1 = SA_Layer(channels=128)
-        self.sa2 = SA_Layer(channels=256)
-        self.sa3 = SA_Layer(channels=256)
-        self.sa4 = SA_Layer(channels=512)
+        self.sa0 = TransformerBlock(channels=128)
+        self.sa1 = TransformerBlock(channels=128)
+        self.sa2 = TransformerBlock(channels=256)
+        self.sa3 = TransformerBlock(channels=256)
+        self.sa4 = TransformerBlock(channels=512)
 
         dim_fuse = sum([128, 128, 256, 256, 512, 512, 16])
         self.conv1d_block = nn.Sequential(
