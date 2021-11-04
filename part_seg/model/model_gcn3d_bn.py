@@ -10,14 +10,13 @@ class GCN3D(nn.Module):
         super().__init__()
         self.neighbor_num = neighbor_num
         self.num_part = class_num
-
-        self.conv_0 = gcn3d.Conv_surface(kernel_num= 128, support_num= support_num*3)
-        self.conv_1 = gcn3d.Conv_layer(128, 128, support_num= support_num*3)
+        self.conv_0 = gcn3d.Conv_surface(kernel_num= 128, support_num= support_num)
+        self.conv_1 = gcn3d.Conv_layer(128, 128, support_num= support_num)
         self.pool_1 = gcn3d.Pool_layer(pooling_rate= 4, neighbor_num= 4)
-        self.conv_2 = gcn3d.Conv_layer(128, 256, support_num= support_num*3)
-        self.conv_3 = gcn3d.Conv_layer(256, 256, support_num= support_num*3)
+        self.conv_2 = gcn3d.Conv_layer(128, 256, support_num= support_num)
+        self.conv_3 = gcn3d.Conv_layer(256, 256, support_num= support_num)
         self.pool_2 = gcn3d.Pool_layer(pooling_rate= 4, neighbor_num= 4)
-        self.conv_4 = gcn3d.Conv_layer(256, 512, support_num= support_num*3)
+        self.conv_4 = gcn3d.Conv_layer(256, 512, support_num= support_num)
 
         dim_fuse = sum([128, 128, 256, 256, 512, 512, 16])
         self.conv1d_block = nn.Sequential(

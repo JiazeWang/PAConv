@@ -23,6 +23,7 @@ def get_neighbor_index(vertices: "(bs, vertice_num, 3)",  neighbor_num: int):
     inner = torch.bmm(vertices, vertices.transpose(1, 2)) #(bs, v, v)
     quadratic = torch.sum(vertices**2, dim= 2) #(bs, v)
     distance = inner * (-2) + quadratic.unsqueeze(1) + quadratic.unsqueeze(2)
+    print("distance.shape", distance.shape)
     neighbor_index = torch.topk(distance, k= neighbor_num + 1, dim= -1, largest= False)[1]
     neighbor_index = neighbor_index[:, :, 1:]
     return neighbor_index

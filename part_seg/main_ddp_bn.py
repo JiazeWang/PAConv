@@ -95,7 +95,7 @@ def train(gpu, ngpus_per_node):
     # ============= Model ===================
     num_part = 50
     from model.model_gcn3d_bn import GCN3D
-    model = model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 50)
+    model = model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 100)
 
     model.apply(weight_init)
 
@@ -196,8 +196,8 @@ def train(gpu, ngpus_per_node):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_acc': best_acc}
-            #torch.save(state, 'checkpoints/%s/best_acc_model.pth' % args.exp_name)
-            torch.save(state, 'checkpoints/%s/best_acc_model_%s.pth' % (args.exp_name, str(epoch)))
+            torch.save(state, 'checkpoints/%s/best_acc_model.pth' % args.exp_name)
+            #torch.save(state, 'checkpoints/%s/best_acc_model_%s.pth' % (args.exp_name, str(epoch)))
 
         # 2. when get the best instance_iou, save the model:
         if test_metrics['shape_avg_iou'] > best_instance_iou and main_process():
@@ -206,8 +206,8 @@ def train(gpu, ngpus_per_node):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_instance_iou': best_instance_iou}
-            #torch.save(state, 'checkpoints/%s/best_insiou_model.pth' % args.exp_name)
-            torch.save(state, 'checkpoints/%s/best_insiou_model_%s.pth' % (args.exp_name, str(epoch)))
+            torch.save(state, 'checkpoints/%s/best_insiou_model.pth' % args.exp_name)
+            #torch.save(state, 'checkpoints/%s/best_insiou_model_%s.pth' % (args.exp_name, str(epoch)))
 
         # 3. when get the best class_iou, save the model:
         # first we need to calculate the average per-class iou
@@ -225,8 +225,8 @@ def train(gpu, ngpus_per_node):
             state = {
                 'model': model.module.state_dict() if torch.cuda.device_count() > 1 else model.state_dict(),
                 'optimizer': opt.state_dict(), 'epoch': epoch, 'test_class_iou': best_class_iou}
-            #torch.save(state, 'checkpoints/%s/best_clsiou_model.pth' % args.exp_name)
-            torch.save(state, 'checkpoints/%s/best_clsiou_model_%s.pth' % (args.exp_name, str(epoch)))
+            torch.save(state, 'checkpoints/%s/best_clsiou_model.pth' % args.exp_name)
+            #torch.save(state, 'checkpoints/%s/best_clsiou_model_%s.pth' % (args.exp_name, str(epoch)))
 
     if main_process():
         # report best acc, ins_iou, cls_iou
