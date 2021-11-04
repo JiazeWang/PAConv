@@ -64,7 +64,7 @@ class GCN3D(nn.Module):
             return pred
 
 class GCN_Fusion_surface(nn.Module):
-    def __init__(self, dim_input, support_num, neighbor_num_l = 5, neighbor_num_g = 100,):
+    def __init__(self, dim_input, support_num, neighbor_num_l = 30, neighbor_num_g = 100,):
         super().__init__()
         self.neighbor_num_l = neighbor_num_l
         self.neighbor_num_g = neighbor_num_g
@@ -87,7 +87,7 @@ class GCN_Fusion_surface(nn.Module):
 
 
 class GCN_Fusion(nn.Module):
-    def __init__(self, dim_input, support_num, neighbor_num_l = 5, neighbor_num_g = 100,):
+    def __init__(self, dim_input, support_num, neighbor_num_l = 30, neighbor_num_g = 100,):
         super().__init__()
         self.neighbor_num_l = neighbor_num_l
         self.neighbor_num_g = neighbor_num_g
