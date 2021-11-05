@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import sys
 sys.path.append("../")
-import gcn3d_attention
+import gcn3d_attention as gcn3d
 
 class GCN3D(nn.Module):
     def __init__(self, class_num, support_num, neighbor_num):
