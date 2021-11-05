@@ -280,6 +280,58 @@ class Conv_layer(nn.Module):
         feature_fuse = feature_center + activation_support # (bs, vertice_num, out_channel)
         return feature_fuse
 
+
+class Attention_Conv_layer_V2(nn.Module):
+    def __init__(self, in_channel, out_channel, support_num):
+        super().__init__()
+        # arguments:
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        self.support_num = support_num
+
+        # parameters:
+        self.relu = nn.ReLU(inplace= True)
+        self.weights = nn.Parameter(torch.FloatTensor(in_channel, (support_num + 1) * out_channel))
+        self.bias = nn.Parameter(torch.FloatTensor((support_num + 1) * out_channel))
+        self.directions = nn.Parameter(torch.FloatTensor(3, support_num * out_channel))
+        self.multihead_attention = MultiHeadedAttention(4, out_channel, fn_attention=attention)
+        self.initialize()
+
+    def initialize(self):
+        stdv = 1. / math.sqrt(self.out_channel * (self.support_num + 1))
+        self.weights.data.uniform_(-stdv, stdv)
+        self.bias.data.uniform_(-stdv, stdv)
+        self.directions.data.uniform_(-stdv, stdv)
+
+    def forward(self,
+                neighbor_index: "(bs, vertice_num, neighbor_index)",
+                vertices: "(bs, vertice_num, 3)",
+                feature_map: "(bs, vertice_num, in_channel)"):
+        """
+        Return: output feature map: (bs, vertice_num, out_channel)
+        """
+        bs, vertice_num, neighbor_num = neighbor_index.size()
+        neighbor_direction_norm = get_neighbor_direction_norm(vertices, neighbor_index)
+        support_direction_norm = F.normalize(self.directions, dim= 0)
+        theta = neighbor_direction_norm @ support_direction_norm # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        theta = self.relu(theta)
+        theta = theta.contiguous().view(bs, vertice_num, neighbor_num, -1)
+        # (bs, vertice_num, neighbor_num, support_num * out_channel)
+
+        feature_out = feature_map @ self.weights + self.bias # (bs, vertice_num, (support_num + 1) * out_channel)
+        feature_center = feature_out[:, :, :self.out_channel] # (bs, vertice_num, out_channel)
+        feature_support = feature_out[:, :, self.out_channel:] #(bs, vertice_num, support_num * out_channel)
+
+        # Fuse together - max among product
+        feature_support = indexing_neighbor(feature_support, neighbor_index) # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        activation_support = theta * feature_support # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        activation_support = activation_support.view(bs,vertice_num, neighbor_num, self.support_num, self.out_channel)
+        activation_support = torch.max(activation_support, dim= 2)[0] # (bs, vertice_num, support_num, out_channel)
+        activation_support = torch.sum(activation_support, dim= 2)    # (bs, vertice_num, out_channel)
+        feature_fuse = feature_center + activation_support # (bs, vertice_num, out_channel)
+        feature_fuse = self.multihead_attention(feature_fuse, feature_fuse, feature_fuse)
+        return feature_fuse
+
 class Attention_Conv_layer(nn.Module):
     def __init__(self, in_channel, out_channel, support_num):
         super().__init__()
