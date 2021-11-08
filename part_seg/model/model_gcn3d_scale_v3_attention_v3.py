@@ -48,7 +48,7 @@ class TransformerBlock(nn.Module):
         x_v = self.v_conv(knn_features)
         qk = torch.einsum('bmnf,bmnf->bmnf', x_q, x_k)
         #print("qk.shape", qk.shape)
-        energy = knn_features + qk
+        energy = pos_enc + qk
         #print("energy.shape:", energy.shape)
         attention = self.softmax(energy)
         attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
