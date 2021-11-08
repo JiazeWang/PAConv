@@ -33,7 +33,9 @@ class TransformerBlock(nn.Module):
     def forward(self, xyz, x):
         x = x.transpose(2,1)
         pre = x
-        pos_enc = self.fc_delta(xyz).transpose(2,1)
+        xyz_mean = torch.mean(xyz, 1, True)
+        #print(xyz_mean[0])
+        pos_enc = self.fc_delta(xyz - xyz_mean).transpose(2,1)
         x = x + pos_enc
         x_q = self.q_conv(x).permute(0, 2, 1)
         # b, c, n
