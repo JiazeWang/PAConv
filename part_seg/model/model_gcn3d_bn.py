@@ -42,8 +42,8 @@ class GCN3D(nn.Module):
         vertices = torch.transpose(vertices, 1, 2)
 
         bs, vertice_num, _ = vertices.size()
+        #neighbor_index = gcn3d.get_neighbor_index(vertices, self.neighbor_num)
         neighbor_index = gcn3d.get_neighbor_index(vertices, self.neighbor_num)
-
         fm_0 = F.relu(self.bn0(self.conv_0(neighbor_index, vertices).transpose(2, 1)).transpose(2, 1), inplace= True)
         fm_1 = F.relu(self.bn1(self.conv_1(neighbor_index, vertices, fm_0).transpose(2, 1)).transpose(2, 1), inplace= True)
         v_pool_1, fm_pool_1 = self.pool_1(vertices, fm_1)

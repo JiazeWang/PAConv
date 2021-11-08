@@ -7,45 +7,56 @@ import gcn3d
 from pointnet_util import index_points, square_distance
 import numpy as np
 
+
 class TransformerBlock(nn.Module):
-    def __init__(self, d_points, d_model, k = 16) -> None:
-        super().__init__()
-        self.fc1 = nn.Linear(d_points, d_model)
-        self.fc2 = nn.Linear(d_model, d_points)
+    def __init__(self, d_points, d_model, k = 16):
+        super(TransformerBlock, self).__init__()
+        self.k = k
+        channels = d_points
+        self.q_conv = nn.Linear(channels, channels)
+        self.k_conv = nn.Linear(channels, channels)
+        self.q_conv.weight = self.k_conv.weight
+        self.q_conv.bias = self.k_conv.bias
+
+        self.v_conv = nn.Linear(channels, channels)
+        self.trans_conv = nn.Conv1d(channels, channels, 1)
+        self.after_norm = nn.BatchNorm1d(channels)
+        self.act = nn.ReLU()
+        self.softmax = nn.Softmax(dim=-1)
+
         self.fc_delta = nn.Sequential(
-            nn.Linear(3, d_model),
+            nn.Linear(3, channels),
             nn.ReLU(),
-            nn.Linear(d_model, d_model)
+            nn.Linear(channels, channels)
         )
         self.fc_gamma = nn.Sequential(
-            nn.Linear(d_model, d_model),
+            nn.Linear(channels, channels),
             nn.ReLU(),
-            nn.Linear(d_model, d_model)
+            nn.Linear(channels, channels)
         )
-        self.w_qs = nn.Linear(d_model, d_model, bias=False)
-        self.w_ks = nn.Linear(d_model, d_model, bias=False)
-        self.w_vs = nn.Linear(d_model, d_model, bias=False)
-        self.k = k
 
-    # xyz: b x n x 3, features: b x n x f
-    def forward(self, xyz, features):
+    def forward(self, xyz, x):
+
         dists = square_distance(xyz, xyz)
         knn_idx = dists.argsort()[:, :, :self.k]  # b x n x k
         knn_xyz = index_points(xyz, knn_idx)
-        print("knn_xyz.shape",  knn_xyz.shape)
-        pre = features
-        print("features.shape", features.shape)
-        x = self.fc1(features)
-        q, k, v = self.w_qs(x), index_points(self.w_ks(x), knn_idx), index_points(self.w_vs(x), knn_idx)
-
-        pos_enc = self.fc_delta(xyz[:, :, None] - knn_xyz)  # b x n x k x f
-
-        attn = self.fc_gamma(q[:, :, None] - k + pos_enc)
-        attn = F.softmax(attn / np.sqrt(k.size(-1)), dim=-2)  # b x n x k x f
-        print("attn.shape", attn.shape)
-        res = torch.einsum('bmnf,bmnf->bmf', attn, v + pos_enc)
-        res = self.fc2(res) + pre
-        return res#, attn
+        knn_features = index_points(x, knn_idx)
+        pre = x
+        pos_enc = self.fc_delta(xyz[:, :, None] - knn_xyz)
+        x_q = self.q_conv(knn_features)
+        x_k = self.k_conv(knn_features)
+        x_v = self.v_conv(knn_features)
+        qk = torch.einsum('bmnf,bmnf->bmnf', x_q, x_k)
+        #print("qk.shape", qk.shape)
+        energy = knn_features + qk
+        #print("energy.shape:", energy.shape)
+        attention = self.softmax(energy)
+        attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
+        # b, c, n
+        res = torch.einsum('bmnf,bmnf->bmf', attention, x_v)
+        #print("res.shape", res.shape)
+        x = pre + res
+        return x
 
 class GCN3D(nn.Module):
     def __init__(self, class_num, support_num, neighbor_num):
