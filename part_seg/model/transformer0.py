@@ -242,9 +242,10 @@ class Transformer(nn.Module):
         #print(xyz.shape) torch.Size([2, 2048, 3])
         pre = feature
         pe = self.fc_delta(xyz)
-        feature = feature +pe
+        feature = feature + pe
         feature_embedding = self.model(feature, feature, None, None)
         #print("feature_embedding.shape:", feature_embedding.shape)
+        feature_embedding = feature_embedding + pre
         return feature_embedding
 
 if __name__ == '__main__':
