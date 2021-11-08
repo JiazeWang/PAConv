@@ -13,12 +13,12 @@ class TransformerBlock(nn.Module):
         super(TransformerBlock, self).__init__()
         self.k = k
         channels = d_points
-        self.q_conv = nn.Linear(channels, channels)
-        self.k_conv = nn.Linear(channels, channels)
+        self.q_conv = nn.Conv1d(channels, channels, 1, bias=False)
+        self.k_conv = nn.Conv1d(channels, channels, 1, bias=False)
         self.q_conv.weight = self.k_conv.weight
         self.q_conv.bias = self.k_conv.bias
 
-        self.v_conv = nn.Linear(channels, channels)
+        self.v_conv = nn.Conv1d(channels, channels, 1)
         self.trans_conv = nn.Conv1d(channels, channels, 1)
         self.after_norm = nn.BatchNorm1d(channels)
         self.act = nn.ReLU()
@@ -29,33 +29,24 @@ class TransformerBlock(nn.Module):
             nn.ReLU(),
             nn.Linear(channels, channels)
         )
-        self.fc_gamma = nn.Sequential(
-            nn.Linear(channels, channels),
-            nn.ReLU(),
-            nn.Linear(channels, channels)
-        )
 
     def forward(self, xyz, x):
+        x = x.transpose(2,1)
+        x_q = self.q_conv(x).permute(0, 2, 1)
+        # b, c, n
+        x_k = self.k_conv(x)
+        x_v = self.v_conv(x)
+        # b, n, n
+        pos_enc = self.fc_delta(xyz).transpose(2,1)
+        x = x + pos_enc
+        energy = torch.bmm(x_q, x_k)
 
-        dists = square_distance(xyz, xyz)
-        knn_idx = dists.argsort()[:, :, :self.k]  # b x n x k
-        knn_xyz = index_points(xyz, knn_idx)
-        knn_features = index_points(x, knn_idx)
-        pre = x
-        pos_enc = self.fc_delta(xyz[:, :, None] - knn_xyz)
-        x_q = self.q_conv(knn_features)
-        x_k = self.k_conv(knn_features)
-        x_v = self.v_conv(knn_features)
-        qk = torch.einsum('bmnf,bmnf->bmnf', x_q, x_k)
-        #print("qk.shape", qk.shape)
-        energy = pos_enc + qk
-        #print("energy.shape:", energy.shape)
         attention = self.softmax(energy)
         attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
         # b, c, n
-        res = torch.einsum('bmnf,bmnf->bmf', attention, x_v)
-        #print("res.shape", res.shape)
-        x = pre + res
+        x_r = torch.bmm(x_v, attention)
+        x_r = self.act(self.after_norm(self.trans_conv(x - x_r)))
+        x = (x + x_r).transpose(2,1)
         return x
 
 class GCN3D(nn.Module):
