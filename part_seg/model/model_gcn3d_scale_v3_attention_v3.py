@@ -32,15 +32,14 @@ class TransformerBlock(nn.Module):
 
     def forward(self, xyz, x):
         x = x.transpose(2,1)
+        pos_enc = self.fc_delta(xyz).transpose(2,1)
+        x = x + pos_enc
         x_q = self.q_conv(x).permute(0, 2, 1)
         # b, c, n
         x_k = self.k_conv(x)
         x_v = self.v_conv(x)
         # b, n, n
-        pos_enc = self.fc_delta(xyz).transpose(2,1)
-        x = x + pos_enc
         energy = torch.bmm(x_q, x_k)
-
         attention = self.softmax(energy)
         attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
         # b, c, n
