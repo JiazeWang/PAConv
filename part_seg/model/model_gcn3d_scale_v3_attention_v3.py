@@ -32,6 +32,7 @@ class TransformerBlock(nn.Module):
 
     def forward(self, xyz, x):
         x = x.transpose(2,1)
+        pre = x
         pos_enc = self.fc_delta(xyz).transpose(2,1)
         x = x + pos_enc
         x_q = self.q_conv(x).permute(0, 2, 1)
@@ -45,7 +46,7 @@ class TransformerBlock(nn.Module):
         # b, c, n
         x_r = torch.bmm(x_v, attention)
         x_r = self.act(self.after_norm(self.trans_conv(x - x_r)))
-        x = (x + x_r).transpose(2,1)
+        x = (pre + x_r).transpose(2,1)
         return x
 
 class GCN3D(nn.Module):
