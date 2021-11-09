@@ -18,6 +18,7 @@ def get_neighbor_index(vertices: "(bs, vertice_num, 3)",  neighbor_num: int):
     """
     Return: (bs, vertice_num, neighbor_num)
     """
+    #print("vertices.shape:", vertices.shape)
     bs, v, _ = vertices.size()
     device = vertices.device
     inner = torch.bmm(vertices, vertices.transpose(1, 2)) #(bs, v, v)
@@ -25,8 +26,26 @@ def get_neighbor_index(vertices: "(bs, vertice_num, 3)",  neighbor_num: int):
     distance = inner * (-2) + quadratic.unsqueeze(1) + quadratic.unsqueeze(2)
     #print("distance.shape", distance.shape)
     neighbor_index = torch.topk(distance, k= neighbor_num + 1, dim= -1, largest= False)[1]
+    #print(neighbor_index.shape)
     neighbor_index = neighbor_index[:, :, 1:]
+    #print(neighbor_index.shape)
     return neighbor_index
+
+def get_neighbor_index_value(vertices: "(bs, vertice_num, 3)",  neighbor_num: int):
+    """
+    Return: (bs, vertice_num, neighbor_num)
+    """
+    #print("vertices.shape:", vertices.shape)
+    bs, v, _ = vertices.size()
+    device = vertices.device
+    inner = torch.bmm(vertices, vertices.transpose(1, 2)) #(bs, v, v)
+    quadratic = torch.sum(vertices**2, dim= 2) #(bs, v)
+    distance = inner * (-2) + quadratic.unsqueeze(1) + quadratic.unsqueeze(2)
+    #print("distance.shape", distance.shape)
+    neighbor_value, neighbor_index = torch.topk(distance, k= neighbor_num + 1, dim= -1, largest= False)
+    neighbor_value = neighbor_value[:, :, 1:]
+    neighbor_index = neighbor_index[:, :, 1:]
+    return neighbor_index, neighbor_value
 
 def get_nearest_index(target: "(bs, v1, 3)", source: "(bs, v2, 3)"):
     """
@@ -132,6 +151,52 @@ class Conv_surface_avg(nn.Module):
         feature = torch.sum(theta, dim= 2) # (bs, vertice_num, kernel_num)
         return feature
 
+
+class Conv_surface_attention(nn.Module):
+    """Extract structure feafure from surface, independent from vertice coordinates"""
+    def __init__(self, kernel_num, support_num):
+        super().__init__()
+        self.kernel_num = kernel_num
+        self.support_num = support_num
+        self.weight_num = 50
+        self.relu = nn.ReLU(inplace= True)
+        self.directions = nn.Parameter(torch.FloatTensor(3, support_num * kernel_num))
+        self.linear = nn.Sequential(
+            nn.Linear(self.weight_num, self.weight_num),
+            nn.ReLU(inplace= True),
+            nn.Linear(self.weight_num, self.weight_num),
+            nn.ReLU(inplace= True),
+        )
+        self.initialize()
+
+    def initialize(self):
+        stdv = 1. / math.sqrt(self.support_num * self.kernel_num)
+        self.directions.data.uniform_(-stdv, stdv)
+
+    def forward(self,
+                neighbor_index: "(bs, vertice_num, neighbor_num)",
+                vertices: "(bs, vertice_num, 3)",
+                neighbor_value: "(bs, vertice_num, neighbor_value)"):
+        """
+        Return vertices with local feature: (bs, vertice_num, kernel_num)
+        """
+        bs, vertice_num, neighbor_num = neighbor_index.size()
+        neighbor_direction_norm = get_neighbor_direction_norm(vertices, neighbor_index)
+        support_direction_norm = F.normalize(self.directions, dim= 0) #(3, s * k)
+        theta = neighbor_direction_norm @ support_direction_norm # (bs, vertice_num, neighbor_num, s*k)
+
+        theta = self.relu(theta)
+        neighbor_value = F.normalize(neighbor_value, dim= -1)
+        weight = self.linear(neighbor_value)
+        weight = F.normalize(neighbor_value, dim= -1)
+
+        theta = torch.einsum('ijkl,ijk->ijkl', [theta, weight])
+        #print("theta.shape:", theta.shape)
+        theta = theta.contiguous().view(bs, vertice_num, neighbor_num, self.support_num, self.kernel_num)
+        theta = torch.sum(theta, dim= 2) # (bs, vertice_num, support_num, kernel_num)
+        feature = torch.sum(theta, dim= 2) # (bs, vertice_num, kernel_num)
+        return feature
+
 class Conv_layer(nn.Module):
     def __init__(self, in_channel, out_channel, support_num):
         super().__init__()
@@ -227,6 +292,63 @@ class Conv_layer_avg(nn.Module):
         activation_support = theta * feature_support # (bs, vertice_num, neighbor_num, support_num * out_channel)
         activation_support = activation_support.view(bs,vertice_num, neighbor_num, self.support_num, self.out_channel)
         activation_support = torch.mean(activation_support, dim= 2) # (bs, vertice_num, support_num, out_channel)
+        activation_support = torch.sum(activation_support, dim= 2)    # (bs, vertice_num, out_channel)
+        feature_fuse = feature_center + activation_support # (bs, vertice_num, out_channel)
+        return feature_fuse
+
+
+class Conv_layer_attention(nn.Module):
+    def __init__(self, in_channel, out_channel, support_num):
+        super().__init__()
+        # arguments:
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        self.support_num = support_num
+        self.weight_num = 50
+        # parameters:
+        self.relu = nn.ReLU(inplace= True)
+        self.weights = nn.Parameter(torch.FloatTensor(in_channel, (support_num + 1) * out_channel))
+        self.bias = nn.Parameter(torch.FloatTensor((support_num + 1) * out_channel))
+        self.directions = nn.Parameter(torch.FloatTensor(3, support_num * out_channel))
+        self.linear = nn.Sequential(
+            nn.Linear(self.weight_num, self.weight_num),
+            nn.ReLU(inplace= True),
+            nn.Linear(self.weight_num, self.weight_num),
+            nn.ReLU(inplace= True),
+        )
+        self.initialize()
+
+    def initialize(self):
+        stdv = 1. / math.sqrt(self.out_channel * (self.support_num + 1))
+        self.weights.data.uniform_(-stdv, stdv)
+        self.bias.data.uniform_(-stdv, stdv)
+        self.directions.data.uniform_(-stdv, stdv)
+
+    def forward(self,
+                neighbor_index: "(bs, vertice_num, neighbor_index)",
+                vertices: "(bs, vertice_num, 3)",
+                feature_map: "(bs, vertice_num, in_channel)",
+                neighbor_value: "(bs, vertice_num, neighbor_value)"):
+        """
+        Return: output feature map: (bs, vertice_num, out_channel)
+        """
+        bs, vertice_num, neighbor_num = neighbor_index.size()
+        neighbor_direction_norm = get_neighbor_direction_norm(vertices, neighbor_index)
+        support_direction_norm = F.normalize(self.directions, dim= 0)
+        theta = neighbor_direction_norm @ support_direction_norm # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        theta = self.relu(theta)
+        theta = theta.contiguous().view(bs, vertice_num, neighbor_num, -1)
+        feature_out = feature_map @ self.weights + self.bias # (bs, vertice_num, (support_num + 1) * out_channel)
+        feature_center = feature_out[:, :, :self.out_channel] # (bs, vertice_num, out_channel)
+        feature_support = feature_out[:, :, self.out_channel:] #(bs, vertice_num, support_num * out_channel)
+        feature_support = indexing_neighbor(feature_support, neighbor_index) # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        neighbor_value = F.normalize(neighbor_value, dim= -1)
+        weight = self.linear(neighbor_value)
+        weight = F.normalize(neighbor_value, dim= -1)
+        activation_support = theta * feature_support # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        activation_support = torch.einsum('ijkl,ijk->ijkl', [activation_support, weight])
+        activation_support = activation_support.view(bs,vertice_num, neighbor_num, self.support_num, self.out_channel)
+        activation_support = torch.sum(activation_support, dim= 2) # (bs, vertice_num, support_num, out_channel)
         activation_support = torch.sum(activation_support, dim= 2)    # (bs, vertice_num, out_channel)
         feature_fuse = feature_center + activation_support # (bs, vertice_num, out_channel)
         return feature_fuse
