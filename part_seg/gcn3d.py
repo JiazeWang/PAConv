@@ -85,7 +85,50 @@ class Conv_surface(nn.Module):
 
         theta = self.relu(theta)
         theta = theta.contiguous().view(bs, vertice_num, neighbor_num, self.support_num, self.kernel_num)
+        #print("theta.shape", theta.shape)
+        #theta.shape torch.Size([2, 2048, 50, 1, 128])
+        #theta_max.shape torch.Size([2, 2048, 1, 128])
+        #feature.shape torch.Size([2, 2048, 128])
         theta = torch.max(theta, dim= 2)[0] # (bs, vertice_num, support_num, kernel_num)
+        #print("theta_max.shape", theta.shape)
+        feature = torch.sum(theta, dim= 2) # (bs, vertice_num, kernel_num)
+        #print("feature.shape", feature.shape)
+        return feature
+
+
+class Conv_surface_avg(nn.Module):
+    """Extract structure feafure from surface, independent from vertice coordinates"""
+    def __init__(self, kernel_num, support_num):
+        super().__init__()
+        self.kernel_num = kernel_num
+        self.support_num = support_num
+
+        self.relu = nn.ReLU(inplace= True)
+        self.directions = nn.Parameter(torch.FloatTensor(3, support_num * kernel_num))
+        self.initialize()
+
+    def initialize(self):
+        stdv = 1. / math.sqrt(self.support_num * self.kernel_num)
+        self.directions.data.uniform_(-stdv, stdv)
+
+    def forward(self,
+                neighbor_index: "(bs, vertice_num, neighbor_num)",
+                vertices: "(bs, vertice_num, 3)"):
+        """
+        Return vertices with local feature: (bs, vertice_num, kernel_num)
+        """
+        bs, vertice_num, neighbor_num = neighbor_index.size()
+        neighbor_direction_norm = get_neighbor_direction_norm(vertices, neighbor_index)
+        support_direction_norm = F.normalize(self.directions, dim= 0) #(3, s * k)
+        theta = neighbor_direction_norm @ support_direction_norm # (bs, vertice_num, neighbor_num, s*k)
+
+        theta = self.relu(theta)
+        theta = theta.contiguous().view(bs, vertice_num, neighbor_num, self.support_num, self.kernel_num)
+        #print(theta.shape)
+        #theta = torch.max(theta, dim= 2)[0]
+        #print(theta.shape)
+        theta = torch.mean(theta, dim= 2) # (bs, vertice_num, support_num, kernel_num)
+        #print(theta.shape)
         feature = torch.sum(theta, dim= 2) # (bs, vertice_num, kernel_num)
         return feature
 
@@ -138,6 +181,56 @@ class Conv_layer(nn.Module):
         feature_fuse = feature_center + activation_support # (bs, vertice_num, out_channel)
         return feature_fuse
 
+
+class Conv_layer_avg(nn.Module):
+    def __init__(self, in_channel, out_channel, support_num):
+        super().__init__()
+        # arguments:
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        self.support_num = support_num
+
+        # parameters:
+        self.relu = nn.ReLU(inplace= True)
+        self.weights = nn.Parameter(torch.FloatTensor(in_channel, (support_num + 1) * out_channel))
+        self.bias = nn.Parameter(torch.FloatTensor((support_num + 1) * out_channel))
+        self.directions = nn.Parameter(torch.FloatTensor(3, support_num * out_channel))
+        self.initialize()
+
+    def initialize(self):
+        stdv = 1. / math.sqrt(self.out_channel * (self.support_num + 1))
+        self.weights.data.uniform_(-stdv, stdv)
+        self.bias.data.uniform_(-stdv, stdv)
+        self.directions.data.uniform_(-stdv, stdv)
+
+    def forward(self,
+                neighbor_index: "(bs, vertice_num, neighbor_index)",
+                vertices: "(bs, vertice_num, 3)",
+                feature_map: "(bs, vertice_num, in_channel)"):
+        """
+        Return: output feature map: (bs, vertice_num, out_channel)
+        """
+        bs, vertice_num, neighbor_num = neighbor_index.size()
+        neighbor_direction_norm = get_neighbor_direction_norm(vertices, neighbor_index)
+        support_direction_norm = F.normalize(self.directions, dim= 0)
+        theta = neighbor_direction_norm @ support_direction_norm # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        theta = self.relu(theta)
+        theta = theta.contiguous().view(bs, vertice_num, neighbor_num, -1)
+        # (bs, vertice_num, neighbor_num, support_num * out_channel)
+
+        feature_out = feature_map @ self.weights + self.bias # (bs, vertice_num, (support_num + 1) * out_channel)
+        feature_center = feature_out[:, :, :self.out_channel] # (bs, vertice_num, out_channel)
+        feature_support = feature_out[:, :, self.out_channel:] #(bs, vertice_num, support_num * out_channel)
+
+        # Fuse together - max among product
+        feature_support = indexing_neighbor(feature_support, neighbor_index) # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        activation_support = theta * feature_support # (bs, vertice_num, neighbor_num, support_num * out_channel)
+        activation_support = activation_support.view(bs,vertice_num, neighbor_num, self.support_num, self.out_channel)
+        activation_support = torch.mean(activation_support, dim= 2) # (bs, vertice_num, support_num, out_channel)
+        activation_support = torch.sum(activation_support, dim= 2)    # (bs, vertice_num, out_channel)
+        feature_fuse = feature_center + activation_support # (bs, vertice_num, out_channel)
+        return feature_fuse
+
 class Pool_layer(nn.Module):
     def __init__(self, pooling_rate: int= 4, neighbor_num: int=  4):
         super().__init__()
@@ -156,6 +249,31 @@ class Pool_layer(nn.Module):
         neighbor_index = get_neighbor_index(vertices, self.neighbor_num)
         neighbor_feature = indexing_neighbor(feature_map, neighbor_index) #(bs, vertice_num, neighbor_num, channel_num)
         pooled_feature = torch.max(neighbor_feature, dim= 2)[0] #(bs, vertice_num, channel_num)
+
+        pool_num = int(vertice_num / self.pooling_rate)
+        sample_idx = torch.randperm(vertice_num)[:pool_num]
+        vertices_pool = vertices[:, sample_idx, :] # (bs, pool_num, 3)
+        feature_map_pool = pooled_feature[:, sample_idx, :] #(bs, pool_num, channel_num)
+        return vertices_pool, feature_map_pool
+
+class Pool_layer_avg(nn.Module):
+    def __init__(self, pooling_rate: int= 4, neighbor_num: int=  4):
+        super().__init__()
+        self.pooling_rate = pooling_rate
+        self.neighbor_num = neighbor_num
+
+    def forward(self,
+                vertices: "(bs, vertice_num, 3)",
+                feature_map: "(bs, vertice_num, channel_num)"):
+        """
+        Return:
+            vertices_pool: (bs, pool_vertice_num, 3),
+            feature_map_pool: (bs, pool_vertice_num, channel_num)
+        """
+        bs, vertice_num, _ = vertices.size()
+        neighbor_index = get_neighbor_index(vertices, self.neighbor_num)
+        neighbor_feature = indexing_neighbor(feature_map, neighbor_index) #(bs, vertice_num, neighbor_num, channel_num)
+        pooled_feature = torch.mean(neighbor_feature, dim= 2) #(bs, vertice_num, channel_num)
 
         pool_num = int(vertice_num / self.pooling_rate)
         sample_idx = torch.randperm(vertice_num)[:pool_num]
