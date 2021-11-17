@@ -64,18 +64,14 @@ class PointTransformerLayer_old(nn.Module):
         return [p, y]
 
 
-class PointTransformerLayer(nn.Module):
+class PointTransformerLayer_L(nn.Module):
 
     def __init__(self,
                  in_channels,
                  out_channels=None,
                  num_neighbors=16):
-        super(PointTransformerLayer, self).__init__()
+        super(PointTransformerLayer_L, self).__init__()
         self.out_channels = in_channels if out_channels is None else out_channels
-
-        self.to_query = nn.Conv1d(in_channels, self.out_channels, kernel_size=1)
-        self.to_key = nn.Conv1d(in_channels, self.out_channels, kernel_size=1)
-        self.to_value = nn.Conv1d(in_channels, self.out_channels, kernel_size=1)
         self.chunk = nn.TransformerEncoderLayer(d_model=in_channels, dim_feedforward=2 * in_channels, dropout=0.0, nhead=4)
         self.pe = nn.Sequential(
             nn.Conv2d(3, 3, kernel_size=1, bias=False),
@@ -107,6 +103,37 @@ class PointTransformerLayer(nn.Module):
         #print("output_features.shape", output_features.shape)
         return [p, output_features]
 
+
+class PointTransformerLayer_G(nn.Module):
+
+    def __init__(self,
+                 in_channels,
+                 out_channels=None,
+                 num_neighbors=16):
+        super(PointTransformerLayer_G, self).__init__()
+        self.out_channels = in_channels if out_channels is None else out_channels
+        self.chunk = nn.TransformerEncoderLayer(d_model=in_channels, dim_feedforward=2 * in_channels, dropout=0.0, nhead=4)
+        self.pe = nn.Sequential(
+            nn.Conv1d(3, 3, kernel_size=1, bias=False),
+            nn.BatchNorm1d(3),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(3, self.out_channels, kernel_size=1)
+        )
+        self.fc = nn.Conv1d(in_channels, self.out_channels, 1)
+        self.grouper = pointops.QueryAndGroup(nsample=num_neighbors, use_xyz=False)
+        self.softmax = nn.Softmax(dim=-1) # (B, C_out, N, K)
+
+    def forward(self, px):
+        p, x = px
+        xyz_flipped = p.transpose(1, 2)
+        position_encoding = self.pe(xyz_flipped)
+        input_features = x + position_encoding
+        input_features = input_features.permute(2, 0, 1)
+        transformed_feats = self.chunk(input_features).permute(1, 2, 0)
+        output_features = self.fc(transformed_feats).squeeze(-1)
+
+        return [p, output_features]
+
 class PointTransformerBlock(nn.Module):
 
     def __init__(self,
@@ -118,8 +145,10 @@ class PointTransformerBlock(nn.Module):
 
         self.linear1 = nn.Conv1d(in_channels, self.out_channels, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm1d(self.out_channels)
-        self.transformer = PointTransformerLayer(self.out_channels, num_neighbors=num_neighbors)
-        self.bn = nn.BatchNorm1d(self.out_channels)
+        self.transformer_l = PointTransformerLayer_L(self.out_channels, num_neighbors=num_neighbors)
+        self.bn_l = nn.BatchNorm1d(self.out_channels)
+        self.transformer_g = PointTransformerLayer_G(self.out_channels, num_neighbors=num_neighbors)
+        self.bn_g = nn.BatchNorm1d(self.out_channels)
         self.linear2 = nn.Conv1d(self.out_channels, self.out_channels, kernel_size=1, bias=False)
         self.bn2 = nn.BatchNorm1d(self.out_channels)
         self.relu = nn.ReLU(inplace=True)
@@ -128,7 +157,8 @@ class PointTransformerBlock(nn.Module):
         p, x = px
 
         y = self.relu(self.bn1(self.linear1(x)))
-        y = self.relu(self.bn(self.transformer([p, y])[1]))
+        y = self.relu(self.bn_l(self.transformer_l([p, y])[1]))
+        y = self.relu(self.bn_g(self.transformer_g([p, y])[1]))
         y = self.bn2(self.linear2(y))
         y += x
         y = self.relu(y)
