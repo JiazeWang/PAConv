@@ -36,10 +36,9 @@ def _init_():
         os.makedirs('checkpoints/'+args.exp_name)
 
     if not args.eval:  # backup the running files
-        os.system('cp main_gcn.py checkpoints' + '/' + args.exp_name + '/' + 'main_gcn.py.backup')
-        #os.system('cp util/PAConv_util.py checkpoints' + '/' + args.exp_name + '/' + 'PAConv_util.py.backup')
-        #os.system('cp util/data_util.py checkpoints' + '/' + args.exp_name + '/' + 'data_util.py.backup')
-        os.system('cp model/model_gcn3d.py checkpoints' + '/' + args.exp_name + '/' + 'model_gcn3d.py.backup')
+        os.system('cp main.py checkpoints' + '/' + args.exp_name + '/' + 'main.py.backup')
+        os.system('cp util/PAConv_util.py checkpoints' + '/' + args.exp_name + '/' + 'PAConv_util.py.backup')
+        os.system('cp util/data_util.py checkpoints' + '/' + args.exp_name + '/' + 'data_util.py.backup')
         if args.arch == 'dgcnn':
             os.system('cp model/DGCNN_PAConv.py checkpoints' + '/' + args.exp_name + '/' + 'DGCNN_PAConv.py.backup')
         elif args.arch == 'pointnet':
@@ -66,9 +65,9 @@ def weight_init(m):
     elif isinstance(m, torch.nn.BatchNorm2d):
         torch.nn.init.constant_(m.weight, 1)
         torch.nn.init.constant_(m.bias, 0)
-    #elif isinstance(m, torch.nn.BatchNorm1d):
-        #torch.nn.init.constant_(m.weight, 1)
-        #torch.nn.init.constant_(m.bias, 0)
+    elif isinstance(m, torch.nn.BatchNorm1d):
+        torch.nn.init.constant_(m.weight, 1)
+        torch.nn.init.constant_(m.bias, 0)
 
 
 def train(args, io):
@@ -85,15 +84,12 @@ def train(args, io):
     elif args.arch == 'pointnet':
         from model.PointNet_PAConv import PAConv
         model = PAConv(args).to(device)
-    elif args.arch == 'gcn':
-        from model.model_gcn3d import GCN3D
-        model = GCN3D(support_num= 1, neighbor_num= 20).to(device)
     else:
         raise Exception("Not implemented")
 
     io.cprint(str(model))
 
-    #model.apply(weight_init)
+    model.apply(weight_init)
     model = nn.DataParallel(model)
     print("Let's use", torch.cuda.device_count(), "GPUs!")
 
@@ -101,15 +97,12 @@ def train(args, io):
     opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
     scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
 
-    #opt = optim.Adam(model.parameters(), lr= 0.001)
-    #scheduler = optim.lr_scheduler.StepLR(opt, step_size= 10, gamma= 0.5)
-
     criterion = cal_loss
 
     best_test_acc = 0
 
     for epoch in range(args.epochs):
-        #scheduler.step()
+        scheduler.step()
         ####################
         # Train
         ####################
@@ -126,14 +119,12 @@ def train(args, io):
             logits = model(data)
             loss = criterion(logits, label)
             loss.backward()
-            #nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0, norm_type=2)
             opt.step()
             preds = logits.max(dim=1)[1]
             count += batch_size
             train_loss += loss.item() * batch_size
             train_true.append(label.cpu().numpy())
             train_pred.append(preds.detach().cpu().numpy())
-        scheduler.step()
         train_true = np.concatenate(train_true)
         train_pred = np.concatenate(train_pred)
         train_acc = metrics.accuracy_score(train_true, train_pred)
@@ -174,7 +165,7 @@ def train(args, io):
         if test_acc >= best_test_acc:
             best_test_acc = test_acc
             io.cprint('Max Acc:%.6f' % best_test_acc)
-            torch.save(model.state_dict(), 'checkpoints/%s/best_model_%s.t7' % (args.exp_name, str(epoch)))
+            torch.save(model.state_dict(), 'checkpoints/%s/best_model.t7' % args.exp_name)
 
 
 def test(args, io):
@@ -190,16 +181,13 @@ def test(args, io):
     elif args.arch == 'pointnet':
         from model.PointNet_PAConv import PAConv
         model = PAConv(args).to(device)
-    elif args.arch == 'gcn':
-        from model.model_gcn3d import GCN3D
-        model = GCN3D(support_num= 1, neighbor_num= 20).to(device)
     else:
         raise Exception("Not implemented")
 
     io.cprint(str(model))
 
     model = nn.DataParallel(model)
-    model.load_state_dict(torch.load("checkpoints/%s/best_model_261.t7" % args.exp_name))
+    model.load_state_dict(torch.load("checkpoints/%s/best_model.t7" % args.exp_name))
     model = model.eval()
     test_acc = 0.0
     count = 0.0

@@ -19,8 +19,15 @@ class SA_Layer(nn.Module):
         self.after_norm = nn.BatchNorm1d(channels)
         self.act = nn.ReLU()
         self.softmax = nn.Softmax(dim=-1)
+        channels_pe = 1024
+        self.pe = nn.Sequential(
+            nn.Conv1d(3, channels, 1),
+            nn.Conv1d(channels/2, channels_pe, 1),
+            )
 
     def forward(self, x):
+        position_encoding = self.pe(x)
+        x = x + position_encoding
         # b, n, c
         x_q = self.q_conv(x).permute(0, 2, 1)
         # b, c, n
@@ -48,22 +55,22 @@ class GCN3D(nn.Module):
         self.conv_2 = gcn3d.Conv_layer(64, 128, support_num= support_num)
         self.conv_3 = gcn3d.Conv_layer(128, 256, support_num= support_num)
         self.pool_2 = gcn3d.Pool_layer(pooling_rate= 4, neighbor_num= 4)
-        self.conv_4 = gcn3d.Conv_layer(256, 1024, support_num= support_num)
+        self.conv_4 = gcn3d.Conv_layer(256, 512, support_num= support_num)
         self.sa1 = SA_Layer(channels=64)
         self.sa2 = SA_Layer(channels=128)
         self.sa3 = SA_Layer(channels=256)
-        self.sa4 = SA_Layer(channels=1024)
+        self.sa4 = SA_Layer(channels=512)
         self.d1 = nn.Conv1d(32, 64, kernel_size=1, bias=False)
         self.d2 = nn.Conv1d(64, 128, kernel_size=1, bias=False)
         self.d3 = nn.Conv1d(128, 256, kernel_size=1, bias=False)
-        self.d4 = nn.Conv1d(256, 1024, kernel_size=1, bias=False)
+        self.d4 = nn.Conv1d(256, 512, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm1d(64, affine=False)
         self.bn2 = nn.BatchNorm1d(128, affine=False)
         self.bn3 = nn.BatchNorm1d(256, affine=False)
-        self.bn4 = nn.BatchNorm1d(1024, affine=False)
+        self.bn4 = nn.BatchNorm1d(512, affine=False)
         self.classifier = nn.Sequential(
-            nn.Linear(1024, 256),
-            nn.Dropout(0.3),
+            nn.Linear(512, 256),
+            nn.Dropout(0.5),
             nn.BatchNorm1d(256),
             nn.ReLU(inplace= True),
             nn.Linear(256, 40)
@@ -117,7 +124,7 @@ def test():
     from util import parameter_number
 
     device = torch.device('cuda:0')
-    points = torch.zeros(8, 1024, 3).to(device)
+    points = torch.zeros(8, 512, 3).to(device)
     model = GCN3D(support_num= 1, neighbor_num= 20).to(device)
     start = time.time()
     output = model(points)
