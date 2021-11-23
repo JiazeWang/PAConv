@@ -1,12 +1,17 @@
 MODEL:
   arch: vit  # backbone network architecture
-  num_matrices: [8, 8, 8, 8]
-  k_neighbors: 20  # number of knn
-  calc_scores: softmax
+  point_size: 1024
+  cluster_num: 4
+  num_classes: 40
+  dim: 1024
+  depth: 4
+  heads: 16
+  mlp_dim: 2048
+  emb_dropout: 0.1
 
 
 TRAIN:
-  exp_name: vit
+  exp_name: vit_new
   num_points: 1024
   pt_norm: False  # input normalization
   batch_size: 32

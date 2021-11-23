@@ -97,7 +97,8 @@ def train(gpu, ngpus_per_node):
         model = PAConv(args)
     elif args.arch == 'vit':
         from model.vit import ViT
-        model = ViT(point_size=1024, cluster_num=4, num_classes=40, dim=512, depth=4, heads=16, mlp_dim=1024, emb_dropout = 0.1)
+        model = ViT(point_size=args.point_size, cluster_num=args.cluster_num,
+                num_classes=args.num_classes, dim=args.dim, depth=args.depth, heads=args.heads, mlp_dim=args.mlp_dim, emb_dropout = args.emb_dropout)
     else:
         raise Exception("Not implemented")
 
@@ -196,6 +197,7 @@ def train_epoch(train_loader, model, opt, scheduler, epoch, criterion):
         end3 = time.time()
         opt.zero_grad()
         loss.backward()   # the own loss of each process, backward by the optimizer belongs to this process
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0, norm_type=2)
         opt.step()
         backward_time.update(time.time() - end3)
 
@@ -420,8 +422,9 @@ def main_worker(gpu, ngpus_per_node, argss):
             os.makedirs('checkpoints/' + args.exp_name)
 
         if not args.eval:  # backup the running files
-            os.system('cp main_vit.py checkpoints' + '/' + args.exp_name + '/' + 'main_vit.py.backup')
-            os.system('cp model/vit.py checkpoints' + '/' + args.exp_name + '/' + 'vit.py.backup')
+            os.system('cp main_vit.py checkpoints' + '/' + args.exp_name + '/' + 'main_vit.py')
+            os.system('cp model/vit.py checkpoints' + '/' + args.exp_name + '/' + 'vit.py')
+            os.system('cp model/config.py checkpoints' + '/' + args.exp_name + '/' + 'vit.yaml')
 
         global logger, writer
         writer = SummaryWriter('checkpoints/' + args.exp_name)
