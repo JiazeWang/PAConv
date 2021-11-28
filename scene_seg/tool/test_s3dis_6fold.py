@@ -4,7 +4,7 @@ import pickle5 as pickle
 import logging
 
 from util.util import AverageMeter, intersectionAndUnion, check_makedirs
-
+import pc_util as vis_util
 
 def get_logger():
     logger_name = "main-logger"
@@ -48,12 +48,12 @@ def main():
     logger.info('<<<<<<<<<<<<<<<<< Start Evaluation <<<<<<<<<<<<<<<<<')
     test_area = [1, 2, 3, 4, 5, 6]
     for i in range(len(test_area)):
-        # result_path = os.path.join('exp/s3dis', exp_list[test_area[i]-1], 'result')
-        result_path = '/exp/s3dis/6-fold'  # where to save all result files
-        # pred_save_folder = os.path.join(result_path, 'best_visual/pred')
-        # label_save_folder = os.path.join(result_path, 'best_visual/label')
-        # image_save_folder = os.path.join(result_path, 'best_visual/image')
-        # check_makedirs(pred_save_folder); check_makedirs(label_save_folder); check_makedirs(image_save_folder)
+        result_path = os.path.join('exp/s3dis', exp_list[test_area[i]-1], 'result')
+        result_path = 'exp/s3dis/6-fold'  # where to save all result files
+        pred_save_folder = os.path.join(result_path, 'best_visual/pred')
+        label_save_folder = os.path.join(result_path, 'best_visual/label')
+        image_save_folder = os.path.join(result_path, 'best_visual/image')
+        check_makedirs(pred_save_folder); check_makedirs(label_save_folder); check_makedirs(image_save_folder)
         with open(os.path.join(result_path, 'pred_{}'.format(test_area[i]) + '.pickle'), 'rb') as handle:
             pred = pickle.load(handle)['pred']
         with open(os.path.join(result_path, 'gt_{}'.format(test_area[i]) + '.pickle'), 'rb') as handle:
@@ -62,14 +62,14 @@ def main():
         assert len(pred) == len(label) == len(data_split)
         for j in range(len(data_split)):
             print('processing [{}/{}]-[{}/{}]'.format(i+1, len(test_area), j+1, len(data_split)))
-            # data_name = data_split[j]
-            # data = np.load(os.path.join(data_root, data_name + '.npy'))
-            # coord, feat = data[:, :3], data[:, 3:6]
+            data_name = data_split[j]
+            data = np.load(os.path.join(data_root, data_name + '.npy'))
+            coord, feat = data[:, :3], data[:, 3:6]
             pred_j, label_j = pred[j].astype(np.uint8), label[j].astype(np.uint8)
-            # pred_j_color, label_j_color = color_map[pred_j, :], color_map[label_j, :]
-            # vis_util.write_ply_color(coord, pred_j, os.path.join(pred_save_folder, data_name +'.obj'))
-            # vis_util.write_ply_color(coord, label_j, os.path.join(label_save_folder, data_name + '.obj'))
-            # vis_util.write_ply_rgb(coord, feat, os.path.join(image_save_folder, data_name + '.obj'))
+            pred_j_color, label_j_color = color_map[pred_j, :], color_map[label_j, :]
+            vis_util.write_ply_color(coord, pred_j, os.path.join(pred_save_folder, data_name +'.obj'))
+            vis_util.write_ply_color(coord, label_j, os.path.join(label_save_folder, data_name + '.obj'))
+            vis_util.write_ply_rgb(coord, feat, os.path.join(image_save_folder, data_name + '.obj'))
             intersection, union, target = intersectionAndUnion(pred_j, label_j, classes, ignore_index=255)
             intersection_meter.update(intersection)
             union_meter.update(union)
