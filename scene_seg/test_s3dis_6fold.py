@@ -75,7 +75,7 @@ def main():
             intersection_meter.update(intersection)
             union_meter.update(union)
             target_meter.update(target)
-
+    """
     iou_class = intersection_meter.sum / (union_meter.sum + 1e-10)
     accuracy_class = intersection_meter.sum / (target_meter.sum + 1e-10)
     mIoU = np.mean(iou_class)
@@ -85,6 +85,7 @@ def main():
 
     for i in range(classes):
         logger.info('Class_{} Result: iou/accuracy {:.4f}/{:.4f}, name: {}.'.format(i, iou_class[i], accuracy_class[i], names[i]))
+    """
     logger.info('<<<<<<<<<<<<<<<<< End Evaluation <<<<<<<<<<<<<<<<<')
 
 
