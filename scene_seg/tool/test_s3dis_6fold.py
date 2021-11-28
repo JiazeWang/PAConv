@@ -2,7 +2,8 @@ import os
 import numpy as np
 import pickle5 as pickle
 import logging
-
+import sys
+sys.path.append("../")
 from util.util import AverageMeter, intersectionAndUnion, check_makedirs
 import pc_util as vis_util
 
