@@ -49,7 +49,7 @@ def main():
     logger.info('<<<<<<<<<<<<<<<<< Start Evaluation <<<<<<<<<<<<<<<<<')
     test_area = [1, 2, 3, 4, 5, 6]
     for i in range(len(test_area)):
-        result_path = os.path.join('exp/s3dis', exp_list[test_area[i]-1], 'result')
+        #result_path = os.path.join('exp/s3dis', exp_list[test_area[i]-1], 'result')
         result_path = 'exp/s3dis/6-fold'  # where to save all result files
         pred_save_folder = os.path.join(result_path, 'best_visual/pred')
         label_save_folder = os.path.join(result_path, 'best_visual/label')
