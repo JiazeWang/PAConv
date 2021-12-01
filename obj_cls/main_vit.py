@@ -8,6 +8,7 @@ import torch.multiprocessing as mp
 import torch.distributed as dist
 import torch.backends.cudnn as cudnn
 from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, StepLR, MultiStepLR
 from util.data_util import ModelNet40 as ModelNet40
 import numpy as np
 from util.util import cal_loss, load_cfg_from_cfg_file, merge_cfg_from_list, find_free_port, AverageMeter, intersectionAndUnionGPU
@@ -97,7 +98,7 @@ def train(gpu, ngpus_per_node):
         model = PAConv(args)
     elif args.arch == 'vit':
         from model.vit import ViT
-        model = ViT(point_size=args.point_size, cluster_num=args.cluster_num,
+        model = ViT(patch_point_num=args.patch_point_num, num_patches=args.num_patches, dropout = args.dropout,
                 num_classes=args.num_classes, dim=args.dim, depth=args.depth, heads=args.heads, mlp_dim=args.mlp_dim, emb_dropout = args.emb_dropout)
     else:
         raise Exception("Not implemented")
@@ -137,10 +138,29 @@ def train(gpu, ngpus_per_node):
                                               num_workers=args.workers, pin_memory=True, sampler=test_sampler)
 
     # ============= Optimizer ===================
+    if args.use_sgd:
+        if main_process():
+            logger.info("Use SGD")
+        opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    else:
+        if main_process():
+            logger.info("Use Adam")
+        opt = optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.999), eps=1e-08, weight_decay=args.weight_decay)
+    if args.scheduler == 'cos':
+        if main_process():
+            logger.info("Use CosLR")
+        scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr / 100)
+    else:
+        if main_process():
+            logger.info("Use StepLR")
+        scheduler = StepLR(opt, step_size=args.step, gamma=0.5)
+    """
     if main_process():
         logger.info("Use SGD")
     opt = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=1e-4)
+
     scheduler = CosineAnnealingLR(opt, args.epochs, eta_min=args.lr/100)
+    """
 
     criterion = cal_loss
     best_test_acc = 0
@@ -197,7 +217,7 @@ def train_epoch(train_loader, model, opt, scheduler, epoch, criterion):
         end3 = time.time()
         opt.zero_grad()
         loss.backward()   # the own loss of each process, backward by the optimizer belongs to this process
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0, norm_type=2)
+        nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0, norm_type=2)
         opt.step()
         backward_time.update(time.time() - end3)
 
@@ -424,7 +444,7 @@ def main_worker(gpu, ngpus_per_node, argss):
         if not args.eval:  # backup the running files
             os.system('cp main_vit.py checkpoints' + '/' + args.exp_name + '/' + 'main_vit.py')
             os.system('cp model/vit.py checkpoints' + '/' + args.exp_name + '/' + 'vit.py')
-            os.system('cp model/config.py checkpoints' + '/' + args.exp_name + '/' + 'vit.yaml')
+            os.system('cp config/vit.yaml checkpoints' + '/' + args.exp_name + '/' + 'vit.yaml')
 
         global logger, writer
         writer = SummaryWriter('checkpoints/' + args.exp_name)

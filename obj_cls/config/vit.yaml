@@ -1,24 +1,28 @@
 MODEL:
   arch: vit  # backbone network architecture
-  point_size: 1024
-  cluster_num: 4
+  patch_point_num: 32
+  num_patches: 64
   num_classes: 40
-  dim: 1024
-  depth: 4
-  heads: 16
-  mlp_dim: 2048
-  emb_dropout: 0.1
+  dim: 256
+  depth: 12
+  heads: 6
+  mlp_dim: 512
+  emb_dropout: 0
+  dropout: 0
 
 
 TRAIN:
-  exp_name: vit_new
+  exp_name: vit_sort_dropout0.5
+  use_sgd: False
+  scheduler: cos
+  step: 100
+  lr: 0.0005
+  weight_decay: 0.05
   num_points: 1024
   pt_norm: False  # input normalization
   batch_size: 32
   test_batch_size: 16
   epochs: 350
-  lr: 0.1
   momentum: 0.9
   eval: False
-  dropout: 0.5
   no_cuda: False

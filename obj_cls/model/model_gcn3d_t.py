@@ -72,7 +72,6 @@ class GCN3D(nn.Module):
     def forward(self,  vertices: "(bs, vertice_num, 3)"):
         vertices = torch.transpose(vertices, 1, 2)
         bs, vertice_num, _ = vertices.size()
-
         neighbor_index = gcn3d.get_neighbor_index(vertices, self.neighbor_num)
         fm_0 = self.conv_0(neighbor_index, vertices)
         fm_0 = F.relu(fm_0, inplace= True)

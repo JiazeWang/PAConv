@@ -5,7 +5,7 @@ import sys
 import open3d as o3d
 sys.path.append("../")
 import numpy as np
-
+from lib.pointops.functions import pointops
 def batched_index_select(values, indices):
     last_dim = values.shape[-1]
     return values.gather(1, indices[:, :, None].expand(-1, -1, last_dim))
@@ -40,6 +40,43 @@ def cluster_points(input, cluster_num = 4):
     result = result.reshape(b, box_num, box_points * c)
     return result
 
+def sort_points(input):
+    b, np, c = input.size()
+    inputnew = input.clone()
+    inputnew[:,:,0] = inputnew[:,:,0]- input[:,:,0].min()
+    inputnew[:,:,1] = inputnew[:,:,1]- input[:,:,1].min()
+    inputnew[:,:,2] = inputnew[:,:,2]- input[:,:,2].min()
+    distance = inputnew[:,:,0] * inputnew[:,:,0] + inputnew[:,:,1] * inputnew[:,:,1]+inputnew[:,:,2] * inputnew[:,:,2]
+    sort_d, index_d = torch.sort(distance)
+    result = batched_index_select(input, index_d)
+    return result
+
+
+
+class get_new_points(nn.Module):
+
+    def __init__(self,
+                 num_clusters = 32,
+                 num_neighbors = 32):
+        super(get_new_points, self).__init__()
+
+        self.num_clusters = num_clusters
+        self.num_neighbors = num_neighbors
+        self.grouper = pointops.QueryAndGroup(nsample=num_neighbors, use_xyz=True, return_xyz=True)
+
+    def forward(self, p1):
+        # points, p: (B, N, 3)
+        # in_features, x: (B, C_in, N)
+        #result = pointops.furthestsampling(px, self.num_clusters)
+        #result = pointops.gathering(px, pointops.furthestsampling(px, self.num_clusters)).transpose(1, 2).contiguous()
+        b, n, c = p1.size()
+        p1_trans = p1.transpose(1, 2).contiguous() # (B, 3, N)
+        p2 = pointops.gathering(p1_trans, pointops.furthestsampling(p1, self.num_clusters)).transpose(1, 2).contiguous()
+        p2 = sort_points(p2)
+        print(p2)
+        print("p2:", p2.shape)
+        n_x = self.grouper(xyz=p1, new_xyz=p2).transpose(1,2).reshape(b, self.num_clusters, c * self.num_neighbors)
+        return n_x
 
 class PT(nn.Module):
     def __init__(self):
@@ -51,11 +88,12 @@ class PT(nn.Module):
             nn.ReLU(inplace= True),
             nn.Linear(256, 40)
         )
+        self.get_new_points = get_new_points()
 
     def forward(self,  vertices: "(bs, vertice_num, 3)"):
         #vertices = torch.transpose(vertices, 1, 2)
         #print(vertices.shape)
-        input = cluster_points(vertices)
+        input = self.get_new_points(vertices)
         #print(input.shape)
         return input
 
@@ -65,24 +103,29 @@ def test():
     #from util import parameter_number
 
     #device = torch.device('cuda:0'
-    #points = torch.randn(8, 1024, 3)#.to(device)
-    points = torch.from_numpy(np.load("target.npy")).unsqueeze(0)
+    #points = torch.randn(8, 1024, 3).cuda()#.to(device)
+    points = torch.from_numpy(np.load("target.npy")).unsqueeze(0).cuda()
     print(points.shape)
-    model = PT()#.to(device)
+    model = PT().cuda()#.to(device)
     start = time.time()
     output = model(points)
-
-    #print(output.shape)
+    print("output", output.shape)
+    output = output.reshape(32, 3, 32).transpose(1,2).reshape(1024, 3)
+    print(output.shape)
     #print("Inference time: {}".format(time.time() - start))
     #print("Parameter #: {}".format(parameter_number(model)))
-    print("Inputs size: {}".format(points.size()))
-    print("Output size: {}".format(output.size()))
+    #print("Inputs size: {}".format(points.size()))
+    #print("Output size: {}".format(output.size()))
     """
-    visdata = output[0][-1]
+
+    visdata = output.cpu().detach().numpy()
+    print(visdata[0])
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(visdata)
     o3d.visualization.draw_geometries([pcd])
     """
+
+
 
 if __name__ == '__main__':
     test()
