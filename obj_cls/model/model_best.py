@@ -5,7 +5,7 @@ import sys
 sys.path.append("../")
 import gcn3d
 from model.transformer0 import Transformer
-
+import numpy as np
 
 
 class GCN3D(nn.Module):
@@ -41,9 +41,9 @@ class GCN3D(nn.Module):
             nn.Linear(1024, 512),
             nn.ReLU(inplace= True),
         )
-        dim_fuse = sum([128, 128, 256, 512, 512, 512, 16])
+
         self.conv1d_block = nn.Sequential(
-            nn.Conv1d(dim_fuse, 512, 1),
+            nn.Conv1d(1024, 512, 1),
             nn.ReLU(inplace= True),
             nn.Conv1d(512, 512, 1),
             nn.ReLU(inplace= True),
@@ -51,9 +51,7 @@ class GCN3D(nn.Module):
         )
 
     def forward(self,
-                vertices: "tensor (bs, vetice_num, 3)",
-                onehot: "tensor (bs, cat_num)",
-                gt=None):
+                vertices: "tensor (bs, vetice_num, 3)"):
         """
         Return: (bs, vertice_num, class_num)
         """
@@ -75,27 +73,10 @@ class GCN3D(nn.Module):
         fm_4 = self.conv_down2(fm_4)
         fm_4 = self.attention4(v_pool_2, fm_4)
         f_global = fm_4.max(1)[0] #(bs, f)
-        nearest_pool_1 = gcn3d.get_nearest_index(vertices, v_pool_1)
-        nearest_pool_2 = gcn3d.get_nearest_index(vertices, v_pool_2)
-        fm_2 = gcn3d.indexing_neighbor(fm_2, nearest_pool_1).squeeze(2)
-        fm_3 = gcn3d.indexing_neighbor(fm_3, nearest_pool_1).squeeze(2)
-        fm_4 = gcn3d.indexing_neighbor(fm_4, nearest_pool_2).squeeze(2)
-        f_global = f_global.unsqueeze(1).repeat(1, vertice_num, 1)
-        onehot = onehot.unsqueeze(1).repeat(1, vertice_num, 1) #(bs, vertice_num, cat_one_hot)
-        fm_fuse = torch.cat([fm_0, fm_1, fm_2, fm_3, fm_4, f_global, onehot], dim= 2)
-        #print(fm_0.shape, fm_1.shape, fm_2.shape, fm_3.shape, fm_4.shape, f_global.shape, onehot.shape )
-        conv1d_input = fm_fuse.permute(0, 2, 1) #(bs, fuse_ch, vertice_num)
-        conv1d_out = self.conv1d_block(conv1d_input)
-        conv1d_out = F.log_softmax(conv1d_out, dim=1)
-        pred = conv1d_out.permute(0, 2, 1) #(bs, vertice_num, ch)
-
-        if gt is not None:
-            return pred, F.nll_loss(pred.contiguous().view(-1, self.num_part), gt.view(-1, 1)[:, 0])
-        else:
-            return pred
+        return f_global
 
 class GCN_Fusion_surface(nn.Module):
-    def __init__(self, dim_input, support_num, neighbor_num_l = 10, neighbor_num_g = 100,):
+    def __init__(self, dim_input, support_num, neighbor_num_l = 10, neighbor_num_g = 50,):
         super().__init__()
         self.neighbor_num_l = neighbor_num_l
         self.neighbor_num_g = neighbor_num_g
@@ -118,7 +99,7 @@ class GCN_Fusion_surface(nn.Module):
 
 
 class GCN_Fusion(nn.Module):
-    def __init__(self, dim_input, support_num, neighbor_num_l = 10, neighbor_num_g = 100,):
+    def __init__(self, dim_input, support_num, neighbor_num_l = 10, neighbor_num_g = 50,):
         super().__init__()
         self.neighbor_num_l = neighbor_num_l
         self.neighbor_num_g = neighbor_num_g
@@ -142,11 +123,9 @@ class GCN_Fusion(nn.Module):
 
 
 def test():
-
-    inputs = torch.randn(B, N, 3)#.cuda()
-    labels = torch.randint(0, 3, (B, N))#.cuda()
+    points = torch.from_numpy(np.load("target.npy")).unsqueeze(0)
     model = GCN3D(class_num= 50, support_num= 1, neighbor_num= 50)
-    print(model(inputs).shape)
+    print(model(points).shape)
 
 if __name__ == "__main__":
     test()
